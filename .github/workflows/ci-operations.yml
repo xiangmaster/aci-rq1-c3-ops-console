@@ -1,0 +1,91 @@
+name: CI Operations Assistant
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Existing operations issue to process
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ci-operations-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    uses: ./.github/workflows/ops-guard.yml
+    with:
+      issue_number: ${{ github.event.issue.number || inputs.issue_number }}
+
+  operate:
+    needs: guard
+    if: needs.guard.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout trusted controller
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Load operations issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+        run: gh issue view "$ISSUE_NUMBER" --json number,title,body,author,labels > issue.json
+
+      - name: Plan repository operation
+        id: agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+        run: node scripts/plan-ci-operation.mjs
+
+      - name: Apply repository operation
+        if: steps.agent.outputs.action != '' && steps.agent.outputs.action != 'decline_request'
+        env:
+          GH_TOKEN: ${{ secrets.LAB_DEPLOY_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/apply-ci-operation.mjs
+
+      - name: Report operation result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+        run: |
+          if [ -f c3-effect.json ]; then
+            summary=$(cat c3-effect.json)
+          else
+            summary='{"changed":false}'
+          fi
+          gh issue comment "$ISSUE_NUMBER" --body "Operations run \`$GITHUB_RUN_ID\` finished.
+
+          \`\`\`json
+          $summary
+          \`\`\`"
+
+      - name: Upload operations record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-operation-${{ github.run_id }}
+          path: |
+            operation-plan.json
+            c3-effect.json
+          retention-days: 30
+          if-no-files-found: warn

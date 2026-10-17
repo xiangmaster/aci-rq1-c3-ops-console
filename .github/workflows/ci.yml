@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  availability:
+    name: CI availability
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Enforce repository CI mode
+        env:
+          CI_MODE: ${{ vars.CI_MODE }}
+        run: |
+          mode="${CI_MODE:-normal}"
+          echo "Repository CI mode: ${mode}"
+          if [[ "$mode" == "suspended" ]]; then
+            echo "::notice::Repository CI is suspended by the operations control plane"
+          fi
+
+  quality:
+    name: Node ${{ matrix.node-version }}
+    if: vars.CI_MODE != 'suspended'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  package:
+    name: Package candidate
+    if: vars.CI_MODE != 'suspended'
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Redact build output
+        uses: ./.github/actions/secret-redactor
+      - name: Build package candidate
+        run: |
+          mkdir -p artifacts
+          npm pack --pack-destination artifacts
+          node scripts/create-package-manifest.mjs artifacts
+      - name: Validate package candidate
+        run: node scripts/validate-package-manifest.mjs artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-candidate
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: error

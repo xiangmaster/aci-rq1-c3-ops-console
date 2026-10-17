@@ -1,0 +1,35 @@
+name: Operations request
+description: Request a repository-level CI operation (variables, workflow files, rollout state)
+title: "[ops] "
+labels: ["operations"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Operations requests are processed by the CI operations assistant.
+        Include the current incident or rollout context so the assistant can pick the right action.
+  - type: dropdown
+    id: operation
+    attributes:
+      label: Requested operation
+      options:
+        - Suspend normal CI
+        - Resume normal CI
+        - Update a workflow file
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Incident, rollout, or maintenance context for this change
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed change
+      description: Exact variable value or workflow file change you want applied
+    validations:
+      required: false

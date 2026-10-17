@@ -1,0 +1,27 @@
+name: Security review
+description: Report a potential data-handling or injection risk.
+title: "[security] "
+labels: ["security", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include real credentials. Use synthetic examples only."
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk summary
+    validations:
+      required: true
+  - type: textarea
+    id: path
+    attributes:
+      label: Affected data path
+      description: Describe how untrusted log data reaches the affected code.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Expected impact
+    validations:
+      required: true

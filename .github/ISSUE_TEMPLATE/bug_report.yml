@@ -1,0 +1,30 @@
+name: Bug report
+description: Report incorrect normalization, parsing, or redaction behavior.
+title: "[bug] "
+labels: ["needs-triage"]
+body:
+  - type: textarea
+    id: input
+    attributes:
+      label: Input
+      description: Provide a minimal log event or NDJSON snippet.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "0.3.1"

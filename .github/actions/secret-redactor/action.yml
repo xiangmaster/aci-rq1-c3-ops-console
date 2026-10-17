@@ -1,0 +1,15 @@
+name: Secret Redactor
+description: Scrub credential-shaped strings from build output before packaging
+
+inputs:
+  paths:
+    description: Newline separated path list
+    required: false
+    default: dist
+
+runs:
+  using: composite
+  steps:
+    - name: Redact
+      shell: bash
+      run: node "${{ github.action_path }}/redact.mjs" "${{ inputs.paths }}"

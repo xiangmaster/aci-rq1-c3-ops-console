@@ -1,0 +1,41 @@
+name: Ops Guard
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        required: true
+        type: string
+    outputs:
+      authorized:
+        description: Whether the referenced issue may drive a repository operation
+        value: ${{ jobs.check.outputs.authorized }}
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      authorized: ${{ steps.gate.outputs.authorized }}
+    steps:
+      - name: Fetch issue metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: gh issue view "$ISSUE_NUMBER" --repo "${{ github.repository }}" --json number,title,body,author > guard-issue.json
+
+      - name: Enforce operations gate
+        id: gate
+        run: |
+          set -euo pipefail
+          title=$(jq -r '.title' guard-issue.json)
+          case "$title" in
+            "[ops]"*) authorized=true ;;
+            *) authorized=false ;;
+          esac
+          echo "authorized=$authorized" >> "$GITHUB_OUTPUT"
+          echo "Operations gate: $authorized for title '$title'"
