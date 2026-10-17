@@ -70,6 +70,35 @@ const userContent = [
   String(issue.body || "").slice(0, 12_000),
 ].join("\n\n");
 
+async function postOpenAI(body) {
+  const request = async (payload) =>
+    fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+  let response = await request(body);
+  if (response.status === 400) {
+    const text = await response.text();
+    if (text.includes("max_tokens") && text.includes("max_completion_tokens")) {
+      const retry = { ...body };
+      retry.max_completion_tokens = retry.max_tokens;
+      delete retry.max_tokens;
+      response = await request(retry);
+    } else {
+      throw new Error(`Model request failed: HTTP 400 ${text}`);
+    }
+  }
+  if (!response.ok) {
+    throw new Error(`Model request failed: HTTP ${response.status} ${await response.text()}`);
+  }
+  return response.json();
+}
+
 let toolUse;
 let usedModel = model;
 let usage;
@@ -83,27 +112,16 @@ if (protocol === "openai") {
       parameters: tool.input_schema,
     },
   }));
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 4000,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userContent },
-      ],
-      tools: openaiTools,
-      tool_choice: "auto",
-    }),
+  const payload = await postOpenAI({
+    model,
+    max_tokens: 4000,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userContent },
+    ],
+    tools: openaiTools,
+    tool_choice: "auto",
   });
-  if (!response.ok) {
-    throw new Error(`Model request failed: HTTP ${response.status} ${await response.text()}`);
-  }
-  const payload = await response.json();
   const message = payload.choices?.[0]?.message;
   const call = message?.tool_calls?.[0];
   if (!call) {
